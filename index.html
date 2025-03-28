@@ -1,214 +1,178 @@
 <!DOCTYPE html>
-<html>
-  <head>
+<html lang="it">
+<head>
     <meta charset="utf-8">
-    <title>AR WINE FANTECK</title>
+    <title>AR WINE FANTECH</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-      body { margin: 0; overflow: hidden; }
-      canvas { display: block; }
-      #fallback { display: none; }
-      #message {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        color: #fff;
-        background: rgba(0, 0, 0, 0.7);
-        padding: 8px 12px;
-        border-radius: 5px;
-        z-index: 1000;
-        font-size: 14px;
-      }
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #fallback { display: none; }
+        #message {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border-radius: 5px;
+            z-index: 1000;
+            font-size: 14px;
+        }
     </style>
     <!-- <model-viewer> per fallback su iOS -->
     <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-  </head>
-  <body>
+</head>
+<body>
     <div id="message">Inizializzazione AR...</div>
-    <!-- Fallback per iOS con AR Quick Look (utilizza lo stesso file GLB) -->
+
+    <!-- Fallback per iOS: Usa Quick Look -->
     <div id="fallback">
-      <model-viewer 
-        src="wine.glb" 
-        ios-src="wine.glb" 
-        ar 
-        ar-modes="quick-look" 
-        camera-controls 
-        auto-rotate 
-        style="width: 100vw; height: 100vh;">
-      </model-viewer>
+        <model-viewer 
+            src="wine.glb" 
+            ios-src="wine.glb" 
+            ar 
+            ar-modes="quick-look" 
+            camera-controls 
+            auto-rotate 
+            style="width: 100vw; height: 100vh;">
+        </model-viewer>
     </div>
-    
+
     <!-- Script per WebXR -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/webxr/ARButton.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/loaders/GLTFLoader.js"></script>
-    
-    <script>
-      const messageEl = document.getElementById('message');
-      const fallbackEl = document.getElementById('fallback');
 
-      // Funzione per rilevare iOS tramite l'user agent
-      function isIOS() {
-        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-      }
-      
-      // Controlla se il dispositivo supporta WebXR e la sessione AR
-      async function supportsWebXR() {
-        return (navigator.xr && await navigator.xr.isSessionSupported('immersive-ar'));
-      }
-      
-      async function init() {
-        if (isIOS()) {
-          // Su iOS attiva il fallback per AR Quick Look
-          messageEl.textContent = 'Utilizzo AR Quick Look nativo (iOS)';
-          fallbackEl.style.display = 'block';
-          return;
+    <script>
+        const messageEl = document.getElementById('message');
+        const fallbackEl = document.getElementById('fallback');
+
+        // Controlla se il dispositivo è un iPhone o iPad
+        function isIOS() {
+            return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
         }
-        if (await supportsWebXR()) {
-          await initWebXR();
-        } else {
-          messageEl.textContent = 'AR non supportato sul tuo dispositivo.';
+
+        // Controlla se il dispositivo supporta WebXR
+        async function supportsWebXR() {
+            return (navigator.xr && await navigator.xr.isSessionSupported('immersive-ar'));
         }
-      }
-      
-      async function initWebXR() {
-        // Richiede l'accesso alla fotocamera posteriore
-        try {
-          await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
-          console.log("Accesso alla fotocamera concesso.");
-          messageEl.textContent = 'Accesso fotocamera OK. Avvio AR...';
-        } catch (error) {
-          console.error("Accesso alla fotocamera negato:", error);
-          messageEl.textContent = "Errore: concedi l'accesso alla fotocamera.";
-          return;
+
+        async function init() {
+            if (isIOS()) {
+                // Se è iOS, attiva il fallback con Quick Look
+                messageEl.textContent = 'Utilizzo AR Quick Look (iOS)';
+                fallbackEl.style.display = 'block';
+                return;
+            }
+
+            if (await supportsWebXR()) {
+                await initWebXR();
+            } else {
+                messageEl.textContent = 'AR non supportato sul tuo dispositivo.';
+            }
         }
-        
-        // Inizializza Three.js: scena, camera e renderer
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.xr.enabled = true;
-        document.body.appendChild(renderer.domElement);
-        
-        // Aggiunge il bottone AR (richiede 'hit-test')
-        document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
-        
-        // Aggiungi luce ambientale
-        const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-        light.position.set(0.5, 1, 0.25);
-        scene.add(light);
-        
-        // Reticle: indica la superficie rilevata
-        const reticle = new THREE.Mesh(
-          new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-          new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-        );
-        reticle.matrixAutoUpdate = false;
-        reticle.visible = false;
-        scene.add(reticle);
-        
-        // Controller per posizionare il modello al tap
-        const controller = renderer.xr.getController(0);
-        scene.add(controller);
-        
-        let wineModel = null;
-        // Carica il modello "wine" (GLB)
-        const loader = new THREE.GLTFLoader();
-        loader.load('wine.glb', (gltf) => {
-          wineModel = gltf.scene;
-          console.log("Modello 'wine' caricato.");
-          messageEl.textContent = "Modello 'wine' caricato. Tocca per posizionarlo.";
-        }, undefined, (error) => {
-          console.error("Errore nel caricamento del modello 'wine':", error);
-          messageEl.textContent = "Errore nel caricamento del modello 'wine'.";
-        });
-        
-        // Evento "select": posiziona il modello sulla superficie rilevata
-        controller.addEventListener('select', () => {
-          if (reticle.visible && wineModel) {
-            const modelClone = wineModel.clone();
-            modelClone.position.setFromMatrixPosition(reticle.matrix);
-            modelClone.scale.set(0.5, 0.5, 0.5);
-            scene.add(modelClone);
-            messageEl.textContent = "Modello posizionato!";
-          } else {
-            messageEl.textContent = "Superficie non rilevata.";
-          }
-        });
-        
-        // Gestione hit-test per la surface detection
-        let hitTestSource = null;
-        let hitTestSourceRequested = false;
-        renderer.setAnimationLoop((timestamp, frame) => {
-          if (frame) {
-            const referenceSpace = renderer.xr.getReferenceSpace();
-            const session = renderer.xr.getSession();
-            
-            if (!hitTestSourceRequested) {
-              session.requestReferenceSpace('viewer').then(viewerSpace => {
-                session.requestHitTestSource({ space: viewerSpace }).then(source => {
-                  hitTestSource = source;
-                }).catch((err) => {
-                  console.error("Errore nell'hit-test:", err);
-                  messageEl.textContent = "Errore nel rilevamento superficie.";
+
+        async function initWebXR() {
+            try {
+                const session = await navigator.xr.requestSession("immersive-ar", {
+                    requiredFeatures: ["hit-test"]
                 });
-              });
-              session.addEventListener('end', () => {
-                hitTestSourceRequested = false;
-                hitTestSource = null;
-              });
-              hitTestSourceRequested = true;
+
+                console.log("Sessione WebXR avviata.");
+                messageEl.textContent = 'Sessione AR avviata...';
+
+                // Inizializza Three.js e WebXR
+                setupARSession(session);
+            } catch (error) {
+                console.error("Errore nell'accesso a WebXR:", error);
+                messageEl.textContent = "Errore: concedi l'accesso alla fotocamera e ai sensori AR.";
             }
-            
-            if (hitTestSource) {
-              const hitTestResults = frame.getHitTestResults(hitTestSource);
-              if (hitTestResults.length) {
-                const hit = hitTestResults[0];
-                const pose = hit.getPose(referenceSpace);
-                reticle.visible = true;
-                reticle.matrix.fromArray(pose.transform.matrix);
-              } else {
-                reticle.visible = false;
-              }
-            }
-          }
-          renderer.render(scene, camera);
-        });
-        
-        // Opzionale: aggiunge supporto per pinch-to-zoom sul modello (se necessario)
-        let selectedModel = null;
-        let prevDistance = null;
-        renderer.domElement.addEventListener('touchstart', (event) => {
-          if (event.touches.length === 2) {
-            prevDistance = getDistance(event.touches[0], event.touches[1]);
-          }
-        }, false);
-        renderer.domElement.addEventListener('touchmove', (event) => {
-          if (event.touches.length === 2 && selectedModel) {
-            const newDistance = getDistance(event.touches[0], event.touches[1]);
-            if (prevDistance) {
-              const scaleFactor = newDistance / prevDistance;
-              selectedModel.scale.multiplyScalar(scaleFactor);
-            }
-            prevDistance = newDistance;
-          }
-        }, false);
-        renderer.domElement.addEventListener('touchend', (event) => {
-          if (event.touches.length < 2) {
-            prevDistance = null;
-          }
-        }, false);
-        
-        function getDistance(t1, t2) {
-          const dx = t2.clientX - t1.clientX;
-          const dy = t2.clientY - t1.clientY;
-          return Math.sqrt(dx * dx + dy * dy);
         }
-      }
-      
-      // Avvia l'inizializzazione AR
-      init();
+
+        function setupARSession(session) {
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+
+            // Luce ambientale
+            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+            light.position.set(0.5, 1, 0.25);
+            scene.add(light);
+
+            // Reticle per la superficie rilevata
+            const reticle = new THREE.Mesh(
+                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
+                new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+            );
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false;
+            scene.add(reticle);
+
+            const controller = renderer.xr.getController(0);
+            scene.add(controller);
+
+            let wineModel = null;
+            const loader = new THREE.GLTFLoader();
+            loader.load('wine.glb', (gltf) => {
+                wineModel = gltf.scene;
+                console.log("Modello 'wine' caricato.");
+                messageEl.textContent = "Modello 'wine' caricato. Tocca per posizionarlo.";
+            });
+
+            controller.addEventListener('select', () => {
+                if (reticle.visible && wineModel) {
+                    const modelClone = wineModel.clone();
+                    modelClone.position.setFromMatrixPosition(reticle.matrix);
+                    modelClone.scale.set(0.5, 0.5, 0.5);
+                    scene.add(modelClone);
+                    messageEl.textContent = "Modello posizionato!";
+                }
+            });
+
+            let hitTestSource = null;
+            let hitTestSourceRequested = false;
+            renderer.setAnimationLoop((timestamp, frame) => {
+                if (frame) {
+                    const referenceSpace = renderer.xr.getReferenceSpace();
+                    const session = renderer.xr.getSession();
+
+                    if (!hitTestSourceRequested) {
+                        session.requestReferenceSpace('viewer').then(viewerSpace => {
+                            session.requestHitTestSource({ space: viewerSpace }).then(source => {
+                                hitTestSource = source;
+                            });
+                        });
+                        session.addEventListener('end', () => {
+                            hitTestSourceRequested = false;
+                            hitTestSource = null;
+                        });
+                        hitTestSourceRequested = true;
+                    }
+
+                    if (hitTestSource) {
+                        const hitTestResults = frame.getHitTestResults(hitTestSource);
+                        if (hitTestResults.length) {
+                            const hit = hitTestResults[0];
+                            const pose = hit.getPose(referenceSpace);
+                            reticle.visible = true;
+                            reticle.matrix.fromArray(pose.transform.matrix);
+                        } else {
+                            reticle.visible = false;
+                        }
+                    }
+                }
+                renderer.render(scene, camera);
+            });
+        }
+
+        init();
     </script>
-  </body>
+</body>
 </html>
