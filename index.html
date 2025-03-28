@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>MVP AR: "Wine" con Surface Detection e Pinch Zoom</title>
+    <title>AR Autonomo: Modello "wine" con WebXR</title>
     <style>
       body { margin: 0; overflow: hidden; }
       canvas { display: block; }
@@ -20,36 +20,36 @@
       let reticle;
       let hitTestSource = null;
       let hitTestSourceRequested = false;
-      let wineModel = null; // Modello "wine" caricato
-      let selectedModel = null; // Ultimo modello posizionato (selezionato)
+      let wineModel = null;
+      let selectedModel = null; // Ultimo modello posizionato per pinch-to-zoom
       
-      // Variabili per il pinch-to-zoom
+      // Variabili per pinch-to-zoom
       let prevDistance = null;
       
       init();
       animate();
       
       function init() {
-        // Creazione della scena e della camera
+        // Creazione della scena
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
         
-        // Renderer con supporto per WebXR
+        // Configurazione del renderer e abilitazione di WebXR
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.xr.enabled = true;
         document.body.appendChild(renderer.domElement);
         
-        // Bottone per entrare in AR, richiede la feature hit-test
+        // Bottone AR per attivare la modalità AR (richiede 'hit-test')
         document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
         
-        // Luce ambientale
+        // Aggiungiamo una luce ambientale
         const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
         light.position.set(0.5, 1, 0.25);
         scene.add(light);
         
-        // Reticle per indicare il punto di posizionamento sulla superficie
+        // Creazione del reticle per il posizionamento
         reticle = new THREE.Mesh(
           new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
           new THREE.MeshBasicMaterial({ color: 0x00ff00 })
@@ -58,12 +58,12 @@
         reticle.visible = false;
         scene.add(reticle);
         
-        // Controller per gestire l'interazione (es. tocco per posizionare il modello)
+        // Controller per interazioni AR
         controller = renderer.xr.getController(0);
         controller.addEventListener('select', onSelect);
         scene.add(controller);
         
-        // Carica il modello "wine" una sola volta
+        // Caricamento del modello "wine"
         const loader = new THREE.GLTFLoader();
         loader.load('wine.glb', function(gltf) {
           wineModel = gltf.scene;
@@ -72,10 +72,10 @@
           console.error('Errore nel caricamento del modello "wine":', error);
         });
         
-        // Event listeners per il pinch-to-zoom
-        renderer.domElement.addEventListener('touchstart', handleTouchStart, false);
-        renderer.domElement.addEventListener('touchmove', handleTouchMove, false);
-        renderer.domElement.addEventListener('touchend', handleTouchEnd, false);
+        // Event listeners per pinch-to-zoom
+        renderer.domElement.addEventListener('touchstart', onTouchStart, false);
+        renderer.domElement.addEventListener('touchmove', onTouchMove, false);
+        renderer.domElement.addEventListener('touchend', onTouchEnd, false);
         
         window.addEventListener('resize', onWindowResize, false);
       }
@@ -86,42 +86,40 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
       }
       
-      // Funzione per gestire l'evento "select" del controller: posiziona il modello "wine"
+      // Evento select: posiziona il modello "wine" dove il reticle è visibile
       function onSelect() {
         if (reticle.visible && wineModel) {
-          // Clona il modello "wine" e lo posiziona dove il reticle è visibile
+          // Clona il modello wine e posiziona la copia
           const modelClone = wineModel.clone();
           modelClone.position.setFromMatrixPosition(reticle.matrix);
-          // Imposta una scala iniziale (modifica se necessario)
           modelClone.scale.set(0.5, 0.5, 0.5);
           scene.add(modelClone);
-          // Rende il modello clonato "selezionato" per eventuali operazioni di zoom
+          // Imposta il modello posizionato come selezionato per eventuali operazioni di scaling
           selectedModel = modelClone;
         } else {
           console.warn('Reticle non visibile o modello "wine" non ancora caricato.');
         }
       }
       
-      // Funzioni per il pinch-to-zoom
-      function handleTouchStart(event) {
+      // Gestione degli eventi touch per il pinch-to-zoom
+      function onTouchStart(event) {
         if (event.touches.length === 2) {
           prevDistance = getDistance(event.touches[0], event.touches[1]);
         }
       }
       
-      function handleTouchMove(event) {
+      function onTouchMove(event) {
         if (event.touches.length === 2 && selectedModel) {
           const newDistance = getDistance(event.touches[0], event.touches[1]);
           if (prevDistance) {
             const scaleFactor = newDistance / prevDistance;
-            // Aggiorna la scala del modello selezionato
             selectedModel.scale.multiplyScalar(scaleFactor);
           }
           prevDistance = newDistance;
         }
       }
       
-      function handleTouchEnd(event) {
+      function onTouchEnd(event) {
         if (event.touches.length < 2) {
           prevDistance = null;
         }
@@ -133,35 +131,32 @@
         return Math.sqrt(dx * dx + dy * dy);
       }
       
-      // Loop di animazione
+      // Loop di animazione e gestione hit-test
       function animate() {
         renderer.setAnimationLoop(render);
       }
       
-      // Rendering e gestione dell'hit-test per il surface detection
       function render(timestamp, frame) {
         if (frame) {
           const referenceSpace = renderer.xr.getReferenceSpace();
           const session = renderer.xr.getSession();
           
           if (!hitTestSourceRequested) {
-            session.requestReferenceSpace('viewer').then(function(viewerReferenceSpace) {
-              session.requestHitTestSource({ space: viewerReferenceSpace }).then(function(source) {
+            session.requestReferenceSpace('viewer').then(viewerReferenceSpace => {
+              session.requestHitTestSource({ space: viewerReferenceSpace }).then(source => {
                 hitTestSource = source;
               });
             });
-            
-            session.addEventListener('end', function() {
+            session.addEventListener('end', () => {
               hitTestSourceRequested = false;
               hitTestSource = null;
             });
-            
             hitTestSourceRequested = true;
           }
           
           if (hitTestSource) {
             const hitTestResults = frame.getHitTestResults(hitTestSource);
-            if (hitTestResults.length) {
+            if (hitTestResults.length > 0) {
               const hit = hitTestResults[0];
               const pose = hit.getPose(referenceSpace);
               reticle.visible = true;
