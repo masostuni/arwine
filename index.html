@@ -2,54 +2,63 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>AR Autonomo: Modello "wine" con WebXR</title>
+    <title>AR Autonomo: Debug e Modello "wine"</title>
     <style>
       body { margin: 0; overflow: hidden; }
       canvas { display: block; }
+      #message { position: absolute; top: 10px; left: 10px; color: red; z-index: 999; font-size: 16px; background: rgba(0, 0, 0, 0.7); padding: 5px; border-radius: 5px; }
+      #startButton { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 10px 20px; font-size: 18px; background: #007AFF; color: white; border: none; border-radius: 5px; cursor: pointer; }
+      #startButton:disabled { background: gray; cursor: not-allowed; }
     </style>
   </head>
   <body>
-    <!-- Includiamo Three.js, ARButton e GLTFLoader dalla CDN -->
+    <div id="message">Premi "Avvia AR" per concedere l'accesso alla fotocamera.</div>
+    <button id="startButton">Avvia AR</button>
+
     <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/webxr/ARButton.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/loaders/GLTFLoader.js"></script>
     
     <script>
       let camera, scene, renderer;
-      let controller;
-      let reticle;
+      let controller, reticle;
       let hitTestSource = null;
       let hitTestSourceRequested = false;
       let wineModel = null;
-      let selectedModel = null; // Ultimo modello posizionato per pinch-to-zoom
-      
-      // Variabili per pinch-to-zoom
+      let selectedModel = null;
       let prevDistance = null;
-      
-      init();
-      animate();
-      
+      const messageEl = document.getElementById('message');
+      const startButton = document.getElementById('startButton');
+
+      async function requestCameraAccess() {
+        try {
+          await navigator.mediaDevices.getUserMedia({ video: true });
+          console.log('Accesso alla fotocamera concesso.');
+          messageEl.textContent = 'Accesso alla fotocamera OK. Premi di nuovo per avviare AR.';
+          startButton.disabled = false;
+        } catch (error) {
+          console.error('Accesso alla fotocamera negato:', error);
+          messageEl.textContent = 'Errore: concedi l’accesso alla fotocamera nelle impostazioni.';
+          startButton.disabled = true;
+        }
+      }
+
       function init() {
-        // Creazione della scena
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
         
-        // Configurazione del renderer e abilitazione di WebXR
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.xr.enabled = true;
         document.body.appendChild(renderer.domElement);
-        
-        // Bottone AR per attivare la modalità AR (richiede 'hit-test')
+
         document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
-        
-        // Aggiungiamo una luce ambientale
+
         const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
         light.position.set(0.5, 1, 0.25);
         scene.add(light);
-        
-        // Creazione del reticle per il posizionamento
+
         reticle = new THREE.Mesh(
           new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
           new THREE.MeshBasicMaterial({ color: 0x00ff00 })
@@ -57,85 +66,80 @@
         reticle.matrixAutoUpdate = false;
         reticle.visible = false;
         scene.add(reticle);
-        
-        // Controller per interazioni AR
+
         controller = renderer.xr.getController(0);
         controller.addEventListener('select', onSelect);
         scene.add(controller);
-        
-        // Caricamento del modello "wine"
+
         const loader = new THREE.GLTFLoader();
         loader.load('wine.glb', function(gltf) {
           wineModel = gltf.scene;
           console.log('"wine" model loaded successfully.');
         }, undefined, function(error) {
           console.error('Errore nel caricamento del modello "wine":', error);
+          messageEl.textContent = 'Errore nel caricamento del modello "wine".';
         });
-        
-        // Event listeners per pinch-to-zoom
+
         renderer.domElement.addEventListener('touchstart', onTouchStart, false);
         renderer.domElement.addEventListener('touchmove', onTouchMove, false);
         renderer.domElement.addEventListener('touchend', onTouchEnd, false);
-        
+
         window.addEventListener('resize', onWindowResize, false);
       }
-      
+
       function onWindowResize() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
       }
-      
-      // Evento select: posiziona il modello "wine" dove il reticle è visibile
+
       function onSelect() {
         if (reticle.visible && wineModel) {
-          // Clona il modello wine e posiziona la copia
           const modelClone = wineModel.clone();
           modelClone.position.setFromMatrixPosition(reticle.matrix);
           modelClone.scale.set(0.5, 0.5, 0.5);
           scene.add(modelClone);
-          // Imposta il modello posizionato come selezionato per eventuali operazioni di scaling
           selectedModel = modelClone;
+          console.log('Modello posizionato.');
         } else {
-          console.warn('Reticle non visibile o modello "wine" non ancora caricato.');
+          messageEl.textContent = 'Rilevamento superficie non riuscito.';
         }
       }
-      
-      // Gestione degli eventi touch per il pinch-to-zoom
+
       function onTouchStart(event) {
         if (event.touches.length === 2) {
           prevDistance = getDistance(event.touches[0], event.touches[1]);
         }
       }
-      
+
       function onTouchMove(event) {
         if (event.touches.length === 2 && selectedModel) {
           const newDistance = getDistance(event.touches[0], event.touches[1]);
           if (prevDistance) {
             const scaleFactor = newDistance / prevDistance;
             selectedModel.scale.multiplyScalar(scaleFactor);
+            console.log('Scaling model by factor:', scaleFactor);
           }
           prevDistance = newDistance;
         }
       }
-      
+
       function onTouchEnd(event) {
         if (event.touches.length < 2) {
           prevDistance = null;
         }
       }
-      
+
       function getDistance(touch1, touch2) {
         const dx = touch2.clientX - touch1.clientX;
         const dy = touch2.clientY - touch1.clientY;
         return Math.sqrt(dx * dx + dy * dy);
       }
-      
-      // Loop di animazione e gestione hit-test
+
       function animate() {
         renderer.setAnimationLoop(render);
       }
-      
+
       function render(timestamp, frame) {
         if (frame) {
           const referenceSpace = renderer.xr.getReferenceSpace();
@@ -145,6 +149,9 @@
             session.requestReferenceSpace('viewer').then(viewerReferenceSpace => {
               session.requestHitTestSource({ space: viewerReferenceSpace }).then(source => {
                 hitTestSource = source;
+              }).catch(err => {
+                console.error('Hit test source error:', err);
+                messageEl.textContent = 'Errore nel rilevamento superficie.';
               });
             });
             session.addEventListener('end', () => {
@@ -161,13 +168,23 @@
               const pose = hit.getPose(referenceSpace);
               reticle.visible = true;
               reticle.matrix.fromArray(pose.transform.matrix);
+              messageEl.textContent = '';
             } else {
               reticle.visible = false;
+              messageEl.textContent = 'Rilevamento superficie in corso...';
             }
           }
         }
         renderer.render(scene, camera);
       }
+
+      startButton.addEventListener('click', () => {
+        startButton.disabled = true;
+        requestCameraAccess().then(() => {
+          init();
+          animate();
+        });
+      });
     </script>
   </body>
 </html>
