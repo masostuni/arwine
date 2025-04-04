@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Model Viewer AR Wine</title>
+    <title>Auto-AR Wine Viewer</title>
     <style>
         body {
             margin: 0;
@@ -30,14 +30,20 @@
             height: 100%;
             background-color: #f5f5f5;
         }
+        
+        /* Nasconde il pulsante AR predefinito */
+        model-viewer::part(ar-button) {
+            display: none;
+        }
     </style>
     <!-- Import model-viewer -->
     <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 </head>
 <body>
-    <div id="status">Caricamento modello...</div>
+    <div id="status">Inizializzazione AR automatica...</div>
     
     <model-viewer 
+        id="wine-model"
         src="wine.glb"
         ar
         ar-modes="webxr scene-viewer quick-look"
@@ -48,53 +54,73 @@
         ar-placement="floor"
         ar-scale="auto"
         ar-status="not-presenting">
-        <button slot="ar-button" style="background-color: #4285f4; color: white; border: none; border-radius: 4px; position: absolute; bottom: 20px; right: 20px; padding: 10px 20px;">
-            Visualizza in AR
-        </button>
     </model-viewer>
     
     <script>
         const status = document.getElementById('status');
-        const modelViewer = document.querySelector('model-viewer');
+        const modelViewer = document.getElementById('wine-model');
         
-        // Controlla se AR è supportato
-        if (navigator.xr) {
-            navigator.xr.isSessionSupported('immersive-ar')
-                .then(supported => {
-                    if (supported) {
-                        status.innerHTML = 'AR supportato tramite WebXR';
-                    } else {
-                        // Fallback a scene-viewer o quick-look
-                        status.innerHTML = 'WebXR non supportato, utilizzo modalità alternativa';
+        // Funzione per avviare AR automaticamente
+        async function startARAutomatically() {
+            status.innerHTML = "Avvio AR automatico...";
+            
+            try {
+                // Attendi il caricamento del modello
+                if (!modelViewer.loaded) {
+                    await new Promise(resolve => {
+                        modelViewer.addEventListener('load', resolve, {once: true});
+                        
+                        // Timeout per evitare attese infinite
+                        setTimeout(resolve, 5000);
+                    });
+                }
+                
+                // Controlla se AR è disponibile
+                const isARAvailable = modelViewer.canActivateAR;
+                
+                if (isARAvailable) {
+                    // Avvia AR automaticamente
+                    try {
+                        await modelViewer.activateAR();
+                        status.innerHTML = "AR attivato automaticamente";
+                    } catch (arError) {
+                        console.error("Errore nell'attivazione AR:", arError);
+                        status.innerHTML = "Errore nell'attivazione AR - visualizzazione 3D";
                     }
-                })
-                .catch(err => {
-                    console.error('Errore nel controllo del supporto AR:', err);
-                    status.innerHTML = 'Errore nel controllo AR';
-                });
-        } else {
-            status.innerHTML = 'WebXR non supportato, utilizzo modalità alternativa';
+                } else {
+                    status.innerHTML = "AR non disponibile - visualizzazione 3D";
+                }
+            } catch (error) {
+                console.error("Errore nell'avvio automatico:", error);
+                status.innerHTML = "Visualizzazione 3D (AR non disponibile)";
+            }
         }
         
-        // Eventi di model-viewer
+        // Eventi model-viewer
         modelViewer.addEventListener('load', () => {
-            status.innerHTML = 'Modello caricato. Tocca il pulsante per visualizzare in AR.';
+            status.innerHTML = "Modello caricato, preparazione AR...";
         });
         
         modelViewer.addEventListener('ar-status', (event) => {
             if (event.detail.status === 'session-started') {
-                status.innerHTML = 'Sessione AR avviata';
+                status.innerHTML = "Esperienza AR attiva";
             } else if (event.detail.status === 'not-presenting') {
-                status.innerHTML = 'Modello caricato. Tocca il pulsante per visualizzare in AR.';
+                status.innerHTML = "Visualizzazione 3D";
             } else if (event.detail.status === 'failed') {
-                status.innerHTML = 'Avvio AR fallito: ' + event.detail.error;
+                status.innerHTML = "AR non disponibile: " + event.detail.error;
             }
         });
         
         // Controllo errori di caricamento
         modelViewer.addEventListener('error', (error) => {
             console.error('Errore nel caricamento del modello:', error);
-            status.innerHTML = 'Errore nel caricamento del modello. Verifica che il file wine.glb esista.';
+            status.innerHTML = "Errore: verifica che il file wine.glb esista";
+        });
+        
+        // Avvia AR automaticamente dopo il caricamento della pagina
+        window.addEventListener('DOMContentLoaded', () => {
+            // Piccolo ritardo per assicurarsi che tutto sia caricato
+            setTimeout(startARAutomatically, 1000);
         });
     </script>
 </body>
