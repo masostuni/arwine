@@ -3,237 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Wine Model Viewer</title>
+    <title>Model Viewer AR Wine</title>
     <style>
         body {
             margin: 0;
             padding: 0;
+            width: 100%;
+            height: 100vh;
             overflow: hidden;
             font-family: Arial, sans-serif;
         }
         
-        #info {
+        #status {
             position: absolute;
             top: 10px;
-            width: 100%;
-            text-align: center;
+            left: 10px;
+            background-color: rgba(0,0,0,0.7);
             color: white;
-            background: rgba(0,0,0,0.5);
-            padding: 5px;
-            z-index: 100;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
         }
         
-        #arButton {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 10px 20px;
-            background: #4285f4;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-weight: bold;
-            z-index: 100;
-        }
-        
-        canvas {
+        model-viewer {
             width: 100%;
             height: 100%;
-            display: block;
-        }
-        
-        /* Per iOS fallback */
-        #ios-container {
-            display: none;
-            width: 100%;
-            height: 100vh;
+            background-color: #f5f5f5;
         }
     </style>
+    <!-- Import model-viewer -->
     <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 </head>
 <body>
-    <div id="info">Inizializzazione AR...</div>
-    <button id="arButton" style="display: none;">Avvia AR</button>
+    <div id="status">Caricamento modello...</div>
     
-    <!-- Fallback per iOS -->
-    <div id="ios-container">
-        <model-viewer 
-            src="wine.glb" 
-            ar ar-modes="webxr scene-viewer quick-look" 
-            camera-controls 
-            auto-rotate 
-            style="width: 100%; height: 100%;">
-        </model-viewer>
-    </div>
+    <model-viewer 
+        src="wine.glb"
+        ar
+        ar-modes="webxr scene-viewer quick-look"
+        camera-controls
+        auto-rotate
+        shadow-intensity="1"
+        camera-orbit="45deg 55deg 2m"
+        ar-placement="floor"
+        ar-scale="auto"
+        ar-status="not-presenting">
+        <button slot="ar-button" style="background-color: #4285f4; color: white; border: none; border-radius: 4px; position: absolute; bottom: 20px; right: 20px; padding: 10px 20px;">
+            Visualizza in AR
+        </button>
+    </model-viewer>
     
-    <script type="module">
-        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.module.js';
-        import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/loaders/GLTFLoader.js';
-        import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/webxr/ARButton.js';
+    <script>
+        const status = document.getElementById('status');
+        const modelViewer = document.querySelector('model-viewer');
         
-        const info = document.getElementById('info');
-        const arButton = document.getElementById('arButton');
-        const iosContainer = document.getElementById('ios-container');
-        
-        // Controlla se il dispositivo è iOS
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        
-        if (isIOS) {
-            // Usa model-viewer per iOS
-            info.textContent = 'Utilizzo AR Quick Look per iOS';
-            iosContainer.style.display = 'block';
-        } else {
-            // Prova WebXR per altri dispositivi
-            if (navigator.xr) {
-                navigator.xr.isSessionSupported('immersive-ar')
-                    .then((supported) => {
-                        if (supported) {
-                            init();
-                            info.textContent = 'AR supportato. Premere il pulsante per iniziare.';
-                        } else {
-                            info.textContent = 'AR non supportato su questo dispositivo.';
-                        }
-                    })
-                    .catch((error) => {
-                        console.error('Errore nel controllo del supporto WebXR:', error);
-                        info.textContent = 'Errore nel controllo del supporto AR.';
-                    });
-            } else {
-                info.textContent = 'WebXR non supportato su questo browser.';
-            }
-        }
-        
-        function init() {
-            const container = document.createElement('div');
-            document.body.appendChild(container);
-            
-            // Scene setup
-            const scene = new THREE.Scene();
-            
-            // Camera setup
-            const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-            
-            // Renderer setup
-            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true;
-            container.appendChild(renderer.domElement);
-            
-            // Lights
-            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-            scene.add(light);
-            
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
-            directionalLight.position.set(0.5, 1, 0.25);
-            scene.add(directionalLight);
-            
-            // AR Button
-            document.body.appendChild(
-                ARButton.createButton(renderer, {
-                    requiredFeatures: ['hit-test'],
-                    optionalFeatures: ['dom-overlay'],
-                    domOverlay: { root: document.body }
+        // Controlla se AR è supportato
+        if (navigator.xr) {
+            navigator.xr.isSessionSupported('immersive-ar')
+                .then(supported => {
+                    if (supported) {
+                        status.innerHTML = 'AR supportato tramite WebXR';
+                    } else {
+                        // Fallback a scene-viewer o quick-look
+                        status.innerHTML = 'WebXR non supportato, utilizzo modalità alternativa';
+                    }
                 })
-            );
-            
-            // Controller
-            const controller = renderer.xr.getController(0);
-            scene.add(controller);
-            
-            // Reticle for surface detection
-            const reticle = new THREE.Mesh(
-                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-                new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-            );
-            reticle.matrixAutoUpdate = false;
-            reticle.visible = false;
-            scene.add(reticle);
-            
-            // Load model
-            let model;
-            const loader = new THREE.GLTFLoader();
-            loader.load(
-                'wine.glb',
-                function(gltf) {
-                    model = gltf.scene;
-                    info.textContent = 'Modello caricato. Punta a una superficie e tocca per posizionarlo.';
-                },
-                function(xhr) {
-                    info.textContent = `Caricamento: ${Math.floor(xhr.loaded / xhr.total * 100)}%`;
-                },
-                function(error) {
-                    console.error('Errore nel caricamento del modello:', error);
-                    info.textContent = 'Errore nel caricamento del modello.';
-                }
-            );
-            
-            // Handle controller select event (tap)
-            controller.addEventListener('select', function() {
-                if (reticle.visible && model) {
-                    const clone = model.clone();
-                    clone.position.setFromMatrixPosition(reticle.matrix);
-                    clone.scale.set(0.5, 0.5, 0.5);
-                    scene.add(clone);
-                    info.textContent = 'Modello posizionato. Tocca di nuovo per aggiungerne altri.';
-                }
-            });
-            
-            // XR session and hit testing
-            let hitTestSource = null;
-            let hitTestSourceRequested = false;
-            
-            renderer.setAnimationLoop(function(timestamp, frame) {
-                if (frame) {
-                    const referenceSpace = renderer.xr.getReferenceSpace();
-                    const session = renderer.xr.getSession();
-                    
-                    if (!hitTestSourceRequested) {
-                        session.requestReferenceSpace('viewer')
-                            .then(function(referenceSpace) {
-                                return session.requestHitTestSource({ space: referenceSpace });
-                            })
-                            .then(function(source) {
-                                hitTestSource = source;
-                            })
-                            .catch(function(error) {
-                                console.error('Errore nel richiedere hit test source:', error);
-                            });
-                        
-                        hitTestSourceRequested = true;
-                        
-                        session.addEventListener('end', function() {
-                            hitTestSourceRequested = false;
-                            hitTestSource = null;
-                        });
-                    }
-                    
-                    if (hitTestSource) {
-                        const hitTestResults = frame.getHitTestResults(hitTestSource);
-                        
-                        if (hitTestResults.length > 0) {
-                            const hit = hitTestResults[0];
-                            const pose = hit.getPose(referenceSpace);
-                            
-                            reticle.visible = true;
-                            reticle.matrix.fromArray(pose.transform.matrix);
-                        } else {
-                            reticle.visible = false;
-                        }
-                    }
-                }
-                
-                renderer.render(scene, camera);
-            });
-            
-            // Handle window resize
-            window.addEventListener('resize', function() {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            });
+                .catch(err => {
+                    console.error('Errore nel controllo del supporto AR:', err);
+                    status.innerHTML = 'Errore nel controllo AR';
+                });
+        } else {
+            status.innerHTML = 'WebXR non supportato, utilizzo modalità alternativa';
         }
+        
+        // Eventi di model-viewer
+        modelViewer.addEventListener('load', () => {
+            status.innerHTML = 'Modello caricato. Tocca il pulsante per visualizzare in AR.';
+        });
+        
+        modelViewer.addEventListener('ar-status', (event) => {
+            if (event.detail.status === 'session-started') {
+                status.innerHTML = 'Sessione AR avviata';
+            } else if (event.detail.status === 'not-presenting') {
+                status.innerHTML = 'Modello caricato. Tocca il pulsante per visualizzare in AR.';
+            } else if (event.detail.status === 'failed') {
+                status.innerHTML = 'Avvio AR fallito: ' + event.detail.error;
+            }
+        });
+        
+        // Controllo errori di caricamento
+        modelViewer.addEventListener('error', (error) => {
+            console.error('Errore nel caricamento del modello:', error);
+            status.innerHTML = 'Errore nel caricamento del modello. Verifica che il file wine.glb esista.';
+        });
     </script>
 </body>
 </html>
