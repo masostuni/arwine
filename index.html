@@ -5,9 +5,21 @@
     <title>AR: Modello "wine" Ibrido Ottimizzato</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; }
-        #fallback { display: none; }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+        }
+        canvas { 
+            display: block; 
+            width: 100%; 
+            height: 100%;
+        }
+        #fallback { 
+            display: none; 
+            width: 100%; 
+            height: 100vh;
+        }
         #message {
             position: absolute;
             top: 10px;
@@ -19,34 +31,66 @@
             z-index: 1000;
             font-size: 14px;
         }
+        #ar-button {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border: none;
+            border-radius: 30px;
+            background: #4285f4;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            display: none;
+            z-index: 1000;
+        }
+        #unsupported {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            max-width: 80%;
+            display: none;
+        }
     </style>
     <!-- <model-viewer> per fallback su iOS -->
-    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <script type="module" src="https://unpkg.com/@google/model-viewer@1.12.0/dist/model-viewer.min.js"></script>
 </head>
 <body>
     <div id="message">Inizializzazione AR...</div>
+    <button id="ar-button">Avvia AR</button>
+    <div id="unsupported">AR non supportato sul tuo dispositivo.</div>
 
     <!-- Fallback per iOS: Usa Quick Look -->
     <div id="fallback">
         <model-viewer 
             src="wine.glb" 
-            ios-src="wine.glb" 
+            ios-src="wine.usdz" 
             ar 
-            ar-modes="quick-look" 
+            ar-modes="webxr scene-viewer quick-look" 
             camera-controls 
             auto-rotate 
-            style="width: 100vw; height: 100vh;">
+            style="width: 100%; height: 100%;">
         </model-viewer>
     </div>
 
     <!-- Script per WebXR -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/webxr/ARButton.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/webxr/ARButton.js"></script>
 
     <script>
         const messageEl = document.getElementById('message');
         const fallbackEl = document.getElementById('fallback');
+        const arButtonEl = document.getElementById('ar-button');
+        const unsupportedEl = document.getElementById('unsupported');
 
         // Controlla se il dispositivo è un iPhone o iPad
         function isIOS() {
@@ -55,123 +99,234 @@
 
         // Controlla se il dispositivo supporta WebXR
         async function supportsWebXR() {
-            return (navigator.xr && await navigator.xr.isSessionSupported('immersive-ar'));
+            if (navigator.xr) {
+                try {
+                    return await navigator.xr.isSessionSupported('immersive-ar');
+                } catch (e) {
+                    console.error("Errore nel controllo del supporto WebXR:", e);
+                    return false;
+                }
+            }
+            return false;
         }
 
         async function init() {
-            if (isIOS()) {
-                // Se è iOS, attiva il fallback con Quick Look
-                messageEl.textContent = 'Utilizzo AR Quick Look (iOS)';
-                fallbackEl.style.display = 'block';
-                return;
-            }
+            try {
+                if (isIOS()) {
+                    // Se è iOS, attiva il fallback con Quick Look
+                    messageEl.textContent = 'Utilizzo AR Quick Look (iOS)';
+                    fallbackEl.style.display = 'block';
+                    return;
+                }
 
-            if (await supportsWebXR()) {
-                await initWebXR();
-            } else {
-                messageEl.textContent = 'AR non supportato sul tuo dispositivo.';
+                const hasWebXR = await supportsWebXR();
+                
+                if (hasWebXR) {
+                    messageEl.textContent = 'AR supportato. Premi il pulsante per iniziare.';
+                    arButtonEl.style.display = 'block';
+                    arButtonEl.addEventListener('click', initWebXR);
+                } else {
+                    messageEl.style.display = 'none';
+                    unsupportedEl.style.display = 'block';
+                }
+            } catch (error) {
+                console.error("Errore nell'inizializzazione:", error);
+                messageEl.textContent = "Errore nell'inizializzazione dell'AR.";
             }
         }
 
         async function initWebXR() {
             try {
-                const session = await navigator.xr.requestSession("immersive-ar", {
-                    requiredFeatures: ["hit-test"]
-                });
-
-                console.log("Sessione WebXR avviata.");
-                messageEl.textContent = 'Sessione AR avviata...';
-
+                arButtonEl.style.display = 'none';
+                
                 // Inizializza Three.js e WebXR
-                setupARSession(session);
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.xr.enabled = true;
+                document.body.appendChild(renderer.domElement);
+
+                // Luci
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(0.5, 1, 0.25);
+                scene.add(directionalLight);
+
+                // Reticle per la superficie rilevata
+                const reticle = new THREE.Mesh(
+                    new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
+                    new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+                );
+                reticle.matrixAutoUpdate = false;
+                reticle.visible = false;
+                scene.add(reticle);
+
+                // Carica il modello
+                let wineModel = null;
+                const loader = new THREE.GLTFLoader();
+                
+                try {
+                    loader.load(
+                        'wine.glb', 
+                        (gltf) => {
+                            wineModel = gltf.scene;
+                            console.log("Modello 'wine' caricato.");
+                            messageEl.textContent = "Modello caricato. Punta a una superficie e tocca per posizionarlo.";
+                        },
+                        (progress) => {
+                            const percent = Math.round((progress.loaded / progress.total) * 100);
+                            messageEl.textContent = `Caricamento modello: ${percent}%`;
+                        },
+                        (error) => {
+                            console.error("Errore nel caricamento del modello:", error);
+                            messageEl.textContent = "Errore nel caricamento del modello.";
+                        }
+                    );
+                } catch (error) {
+                    console.error("Errore nel caricamento del modello:", error);
+                    messageEl.textContent = "Errore nel caricamento del modello.";
+                }
+
+                // Gestisci sessione AR
+                const sessionInit = {
+                    requiredFeatures: ['hit-test'],
+                    optionalFeatures: ['dom-overlay'],
+                    domOverlay: { root: document.body }
+                };
+
+                const arButton = document.createElement('button');
+                arButton.style.display = 'none';
+                document.body.appendChild(arButton);
+                
+                // Creiamo manualmente il bottone AR
+                const customARButton = {
+                    domElement: arButton,
+                    
+                    async createSession() {
+                        try {
+                            const session = await navigator.xr.requestSession("immersive-ar", sessionInit);
+                            
+                            session.addEventListener('end', () => {
+                                messageEl.textContent = "Sessione AR terminata";
+                                arButtonEl.style.display = 'block';
+                                arButtonEl.textContent = "Riavvia AR";
+                                hitTestSourceRequested = false;
+                                hitTestSource = null;
+                            });
+                            
+                            renderer.xr.setReferenceSpaceType('local');
+                            await renderer.xr.setSession(session);
+                            
+                            messageEl.textContent = "Cerca una superficie...";
+                            startAR(session);
+                            
+                            return session;
+                        } catch (error) {
+                            console.error("Errore nell'avvio della sessione AR:", error);
+                            messageEl.textContent = "Errore: concedi l'accesso alla fotocamera.";
+                            arButtonEl.style.display = 'block';
+                            return null;
+                        }
+                    }
+                };
+                
+                customARButton.createSession();
+                
+                let hitTestSource = null;
+                let hitTestSourceRequested = false;
+                let currentSession = null;
+                
+                function startAR(session) {
+                    currentSession = session;
+                    
+                    const controller = renderer.xr.getController(0);
+                    controller.addEventListener('select', onSelect);
+                    scene.add(controller);
+                    
+                    function onSelect() {
+                        if (reticle.visible && wineModel) {
+                            const modelClone = wineModel.clone();
+                            modelClone.position.setFromMatrixPosition(reticle.matrix);
+                            // Scala adeguata per il modello
+                            modelClone.scale.set(0.5, 0.5, 0.5);
+                            scene.add(modelClone);
+                            messageEl.textContent = "Modello posizionato! Tocca per aggiungerne altri.";
+                        }
+                    }
+                    
+                    renderer.setAnimationLoop(render);
+                }
+                
+                function render(timestamp, frame) {
+                    if (frame) {
+                        const referenceSpace = renderer.xr.getReferenceSpace();
+                        const session = renderer.xr.getSession();
+                        
+                        if (!hitTestSourceRequested) {
+                            session.requestReferenceSpace('viewer')
+                                .then(viewerSpace => {
+                                    session.requestHitTestSource({ space: viewerSpace })
+                                        .then(source => {
+                                            hitTestSource = source;
+                                        })
+                                        .catch(error => {
+                                            console.error("Errore nel richiedere hit test source:", error);
+                                        });
+                                })
+                                .catch(error => {
+                                    console.error("Errore nel richiedere viewer space:", error);
+                                });
+                            
+                            session.addEventListener('end', () => {
+                                hitTestSourceRequested = false;
+                                hitTestSource = null;
+                            });
+                            
+                            hitTestSourceRequested = true;
+                        }
+                        
+                        if (hitTestSource) {
+                            const hitTestResults = frame.getHitTestResults(hitTestSource);
+                            
+                            if (hitTestResults.length > 0) {
+                                const hit = hitTestResults[0];
+                                const pose = hit.getPose(referenceSpace);
+                                
+                                if (pose) {
+                                    reticle.visible = true;
+                                    reticle.matrix.fromArray(pose.transform.matrix);
+                                } else {
+                                    reticle.visible = false;
+                                }
+                            } else {
+                                reticle.visible = false;
+                            }
+                        }
+                    }
+                    
+                    renderer.render(scene, camera);
+                }
+                
+                // Gestione ridimensionamento finestra
+                window.addEventListener('resize', () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+                
             } catch (error) {
-                console.error("Errore nell'accesso a WebXR:", error);
-                messageEl.textContent = "Errore: concedi l'accesso alla fotocamera e ai sensori AR.";
+                console.error("Errore nella creazione di WebXR:", error);
+                messageEl.textContent = "Errore nell'avvio di AR: " + error.message;
+                arButtonEl.style.display = 'block';
+                arButtonEl.textContent = "Riprova";
             }
         }
 
-        function setupARSession(session) {
-            const scene = new THREE.Scene();
-            const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true;
-            document.body.appendChild(renderer.domElement);
-
-            document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
-
-            // Luce ambientale
-            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-            light.position.set(0.5, 1, 0.25);
-            scene.add(light);
-
-            // Reticle per la superficie rilevata
-            const reticle = new THREE.Mesh(
-                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-                new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-            );
-            reticle.matrixAutoUpdate = false;
-            reticle.visible = false;
-            scene.add(reticle);
-
-            const controller = renderer.xr.getController(0);
-            scene.add(controller);
-
-            let wineModel = null;
-            const loader = new THREE.GLTFLoader();
-            loader.load('wine.glb', (gltf) => {
-                wineModel = gltf.scene;
-                console.log("Modello 'wine' caricato.");
-                messageEl.textContent = "Modello 'wine' caricato. Tocca per posizionarlo.";
-            });
-
-            controller.addEventListener('select', () => {
-                if (reticle.visible && wineModel) {
-                    const modelClone = wineModel.clone();
-                    modelClone.position.setFromMatrixPosition(reticle.matrix);
-                    modelClone.scale.set(0.5, 0.5, 0.5);
-                    scene.add(modelClone);
-                    messageEl.textContent = "Modello posizionato!";
-                }
-            });
-
-            let hitTestSource = null;
-            let hitTestSourceRequested = false;
-            renderer.setAnimationLoop((timestamp, frame) => {
-                if (frame) {
-                    const referenceSpace = renderer.xr.getReferenceSpace();
-                    const session = renderer.xr.getSession();
-
-                    if (!hitTestSourceRequested) {
-                        session.requestReferenceSpace('viewer').then(viewerSpace => {
-                            session.requestHitTestSource({ space: viewerSpace }).then(source => {
-                                hitTestSource = source;
-                            });
-                        });
-                        session.addEventListener('end', () => {
-                            hitTestSourceRequested = false;
-                            hitTestSource = null;
-                        });
-                        hitTestSourceRequested = true;
-                    }
-
-                    if (hitTestSource) {
-                        const hitTestResults = frame.getHitTestResults(hitTestSource);
-                        if (hitTestResults.length) {
-                            const hit = hitTestResults[0];
-                            const pose = hit.getPose(referenceSpace);
-                            reticle.visible = true;
-                            reticle.matrix.fromArray(pose.transform.matrix);
-                        } else {
-                            reticle.visible = false;
-                        }
-                    }
-                }
-                renderer.render(scene, camera);
-            });
-        }
-
+        // Avvia l'applicazione
         init();
     </script>
 </body>
