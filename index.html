@@ -6,7 +6,7 @@
   <title>AR Wine Experience</title>
   <meta name="theme-color" content="#000000">
   <style>
-    /* Stili base per schermo intero */
+    /* Stili per schermo intero senza titolo e cornice */
     body, html {
       margin: 0;
       padding: 0;
@@ -14,35 +14,30 @@
       height: 100%;
       background: #000;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       font-family: Arial, sans-serif;
       color: white;
-      overflow: hidden;
     }
-    /* Il componente model-viewer occupa tutto lo schermo */
+    /* model-viewer senza bordi */
     model-viewer {
-      width: 100%;
-      height: 100%;
+      width: 90%;
+      height: 60%;
       background: #000;
     }
-    /* Controlli (bottoni) posizionati in basso, con dimensioni ridotte */
     .controls {
-      position: absolute;
-      bottom: 20px;
       display: flex;
-      gap: 5px;
-      padding: 0 10px;
-      z-index: 10;
+      gap: 10px;
+      margin-top: 20px;
     }
     .controls button {
-      padding: 5px 10px;
-      font-size: 14px;
+      padding: 10px 20px;
       border: none;
       background: #444;
       color: white;
       cursor: pointer;
-      border-radius: 3px;
+      border-radius: 5px;
       transition: background 0.3s;
     }
     .controls button:hover {
@@ -53,7 +48,7 @@
   <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 </head>
 <body>
-  <!-- Componente model-viewer senza titolo né cornice -->
+  <!-- Componente model-viewer senza titolo e cornice -->
   <model-viewer id="arModel"
     src="wine-red.glb"
     ios-src="wine-red.usdz"
@@ -75,7 +70,8 @@
   <script>
     const modelViewer = document.getElementById('arModel');
 
-    // Funzione per applicare la scala 0.1 al modello per Android/WebXR
+    // Funzione per applicare la scala 0.1 al modello per Android/WebXR.
+    // NOTA: su iOS, AR Quick Look usa il file USDZ e la scala deve essere impostata durante la conversione.
     function applyScale() {
       if (modelViewer.model) {
         modelViewer.model.scale.set(0.1, 0.1, 0.1);
@@ -83,14 +79,14 @@
       }
     }
 
-    // Ascolta l'evento scene-graph-ready per applicare lo scaling (efficace su Android/WebXR)
+    // Applica la scala quando la scena è pronta (efficace per WebXR/Android).
     modelViewer.addEventListener('scene-graph-ready', applyScale);
 
-    // Cambio modello: aggiorna src e ios-src, e riapplica lo scaling
     function changeModel(type) {
       modelViewer.setAttribute('src', `${type}.glb`);
       modelViewer.setAttribute('ios-src', `${type}.usdz`);
-      // Rimuovo e riaggiungo il listener per evitare duplicati
+      
+      // Rimuovo e riaggiungo il listener per applicare la scala al nuovo modello
       modelViewer.removeEventListener('scene-graph-ready', applyScale);
       modelViewer.addEventListener('scene-graph-ready', applyScale);
     }
