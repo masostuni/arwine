@@ -6,9 +6,10 @@
   <title>AR Wine Experience</title>
 
   <!-- Permessi e configurazioni per dispositivi mobile -->
+  <!-- Ho aggiornato il meta tag per i permessi per maggiore compatibilità -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta http-equiv="Permissions-Policy" content="camera=(self)">
+  <meta http-equiv="Permissions-Policy" content="camera=()" />
   <meta name="theme-color" content="#000000">
 
   <style>
@@ -146,6 +147,7 @@
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
+      // Aggiungo il bottone per abilitare la modalità AR
       document.body.appendChild(ARButton.createButton(renderer, {
         requiredFeatures: ['hit-test'],
         optionalFeatures: ['dom-overlay'],
@@ -213,10 +215,12 @@
           wineSelector.classList.add('hidden');
           modelPlaced = true;
 
+          // Animazione di scaling del modello
           model.scale.set(0, 0, 0);
           animateModel(model);
         });
       } else if (modelPlaced) {
+        // Permette di riposizionare il modello se l'utente tocca nuovamente
         modelPlaced = false;
         reticle.visible = true;
         tapInstruction.classList.remove('hidden');
@@ -235,7 +239,6 @@
         model.scale.set(s, s, s);
         if (progress < 1) requestAnimationFrame(scaleStep);
       }
-
       requestAnimationFrame(scaleStep);
     }
 
@@ -278,7 +281,6 @@
           }
         }
       }
-
       renderer.render(scene, camera);
     }
   </script>
