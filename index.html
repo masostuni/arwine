@@ -6,7 +6,7 @@
   <title>AR Wine Experience</title>
   <meta name="theme-color" content="#000000">
   <style>
-    /* Stili per schermo intero e centrato, senza titolo e senza cornice */
+    /* Stili per schermo intero senza titolo e cornice */
     body, html {
       margin: 0;
       padding: 0;
@@ -20,7 +20,7 @@
       font-family: Arial, sans-serif;
       color: white;
     }
-    /* Il componente model-viewer occupa lo spazio necessario ma senza bordi */
+    /* model-viewer senza bordi */
     model-viewer {
       width: 90%;
       height: 60%;
@@ -44,7 +44,7 @@
       background: #666;
     }
   </style>
-  <!-- Includo il componente model-viewer -->
+  <!-- Inclusione di model-viewer -->
   <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 </head>
 <body>
@@ -60,7 +60,7 @@
     style="background-color: #000;">
   </model-viewer>
   
-  <!-- Pulsanti per selezionare il modello -->
+  <!-- Pulsanti per cambiare modello -->
   <div class="controls">
     <button onclick="changeModel('wine-red')">Rosso</button>
     <button onclick="changeModel('wine-white')">Bianco</button>
@@ -69,24 +69,25 @@
 
   <script>
     const modelViewer = document.getElementById('arModel');
-    
-    // Imposta la scala del modello a 0.1 (10%) quando il modello è caricato
-    modelViewer.addEventListener('load', () => {
+
+    // Funzione per applicare la scala 0.1 al modello
+    function applyScale() {
       if (modelViewer.model) {
         modelViewer.model.scale.set(0.1, 0.1, 0.1);
+        console.log("Modello scalato al 10%");
       }
-    });
+    }
+
+    // Applica la scala quando la scena è pronta
+    modelViewer.addEventListener('scene-graph-ready', applyScale);
 
     function changeModel(type) {
       modelViewer.setAttribute('src', `${type}.glb`);
       modelViewer.setAttribute('ios-src', `${type}.usdz`);
       
-      // Quando il modello viene cambiato, la scala verrà nuovamente impostata
-      modelViewer.addEventListener('load', () => {
-        if (modelViewer.model) {
-          modelViewer.model.scale.set(0.1, 0.1, 0.1);
-        }
-      });
+      // Rimuovo eventuali listener duplicati e riapplico quando il nuovo modello è pronto
+      modelViewer.removeEventListener('scene-graph-ready', applyScale);
+      modelViewer.addEventListener('scene-graph-ready', applyScale);
     }
   </script>
 </body>
