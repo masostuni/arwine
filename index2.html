@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>AR Wine Experience - Versione 2</title>
+
+  <!-- Configurazioni per dispositivi mobile e permessi -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta http-equiv="Permissions-Policy" content="camera=()" />
+  <meta name="theme-color" content="#000000">
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      width: 100vw;
+      height: 100vh;
+      background-color: #000;
+    }
+    canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+    .ui-container, .wine-selector {
+      position: absolute;
+      left: 0; right: 0;
+      display: flex;
+      justify-content: center;
+      z-index: 10;
+    }
+    .ui-container {
+      bottom: 20px;
+      pointer-events: none;
+    }
+    .tap-instruction {
+      background-color: rgba(0, 0, 0, 0.6);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 30px;
+      font-size: 16px;
+      transition: opacity 0.3s ease;
+    }
+    .hidden { opacity: 0; }
+    .wine-selector {
+      bottom: 80px;
+      gap: 10px;
+    }
+    .wine-selector button {
+      background-color: rgba(255, 255, 255, 0.1);
+      border: 1px solid #fff;
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    .wine-selector button:hover {
+      background-color: rgba(255, 255, 255, 0.3);
+    }
+    .loading-screen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background-color: #000;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      z-index: 100;
+    }
+    .loading-spinner {
+      border: 5px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top: 5px solid #fff;
+      width: 50px; height: 50px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Schermata di caricamento iniziale -->
+  <div class="loading-screen" id="loadingScreen">
+    <div class="loading-spinner"></div>
+    <p>Caricamento dell'esperienza AR...</p>
+  </div>
+
+  <!-- Istruzioni per l'utente -->
+  <div class="ui-container">
+    <div class="tap-instruction hidden" id="tapInstruction">
+      Tocca su una superficie per posizionare la bottiglia di vino
+    </div>
+  </div>
+
+  <!-- Selettore del modello di vino -->
+  <div class="wine-selector" id="wineSelector">
+    <button data-model="wine-red.glb">Rosso</button>
+    <button data-model="wine-white.glb">Bianco</button>
+    <button data-model="wine-sparkling.glb">Spumante</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.128.0/build/three.module.js';
+    import { GLTFLoader } from 'https://unpkg.com/three@0.128.0/examples/jsm/loaders/GLTFLoader.js';
+    import { ARButton } from 'https://unpkg.com/three@0.128.0/examples/jsm/webxr/ARButton.js';
+
+    let scene, camera, renderer, controller, reticle;
+    let hitTestSource = null, hitTestSourceRequested = false;
+    let wineModel, modelLoaded = false;
+    let modelPlaced = false;
+    let selectedModel = 'wine-red.glb';
+
+    const loadingScreen = document.getElementById('loadingScreen');
+    const tapInstruction = document.getElementById('tapInstruction');
+    const wineSelector = document.getElementById('wineSelector');
+
+    init();
+    animate();
+
+    function init() {
+      // Inizializzazione scena e camera
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+      light.position.set(0.5, 1, 0.25);
+      scene.add(light);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      // Aggiunta del bottone AR con supporto per il dom-overlay
+      document.body.appendChild(ARButton.createButton(renderer, {
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.body }
+      }));
+
+      // Controller per gestire il tap sullo schermo
+      controller = renderer.xr.getController(0);
+      controller.addEventListener('select', onSelect);
+      scene.add(controller);
+
+      // Creazione del reticle per il posizionamento
+      reticle = new THREE.Mesh(
+        new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0x00ffff })
+      );
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      scene.add(reticle);
+
+      // Gestione dei bottoni per la selezione del modello
+      document.querySelectorAll('.wine-selector button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectedModel = btn.dataset.model;
+          modelLoaded = false;
+          wineModel = null;
+        });
+      });
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Carica il modello selezionato (se già non caricato)
+    function loadModel(callback) {
+      if (modelLoaded) return callback();
+      const loader = new GLTFLoader();
+      loader.load(selectedModel,
+        gltf => {
+          wineModel = gltf.scene;
+          wineModel.scale.set(0.5, 0.5, 0.5);
+          modelLoaded = true;
+          loadingScreen.classList.add('hidden');
+          setTimeout(() => loadingScreen.style.display = 'none', 300);
+          callback();
+        },
+        undefined,
+        error => {
+          console.error('Errore nel caricamento del modello:', error);
+        }
+      );
+    }
+
+    // Gestione del tap sullo schermo per posizionare il modello
+    function onSelect() {
+      if (reticle.visible && !modelPlaced) {
+        loadModel(() => {
+          const model = wineModel.clone();
+          model.position.setFromMatrixPosition(reticle.matrix);
+          model.rotation.y = Math.random() * Math.PI * 2;
+          scene.add(model);
+          animateModel(model);
+          modelPlaced = true;
+          reticle.visible = false;
+          tapInstruction.classList.add('hidden');
+          wineSelector.classList.add('hidden');
+        });
+      }
+    }
+
+    // Animazione di scaling del modello
+    function animateModel(model) {
+      const targetScale = 0.5;
+      const duration = 500;
+      const startTime = performance.now();
+      function step(now) {
+        const progress = Math.min((now - startTime) / duration, 1);
+        const s = targetScale * progress;
+        model.scale.set(s, s, s);
+        if (progress < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    function animate() {
+      renderer.setAnimationLoop(render);
+    }
+
+    function render(timestamp, frame) {
+      if (frame) {
+        const referenceSpace = renderer.xr.getReferenceSpace();
+        const session = renderer.xr.getSession();
+
+        // Richiedi il hit test se non già richiesto
+        if (!hitTestSourceRequested) {
+          session.requestReferenceSpace('viewer').then(refSpace => {
+            session.requestHitTestSource({ space: refSpace }).then(source => {
+              hitTestSource = source;
+            });
+          });
+          session.addEventListener('end', () => {
+            hitTestSourceRequested = false;
+            hitTestSource = null;
+          });
+          hitTestSourceRequested = true;
+        }
+
+        if (hitTestSource && !modelPlaced) {
+          const hitTestResults = frame.getHitTestResults(hitTestSource);
+          if (hitTestResults.length > 0) {
+            const hit = hitTestResults[0];
+            const pose = hit.getPose(referenceSpace);
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+            tapInstruction.classList.remove('hidden');
+            wineSelector.classList.remove('hidden');
+          } else {
+            reticle.visible = false;
+            tapInstruction.classList.add('hidden');
+          }
+        }
+      }
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+</html>
