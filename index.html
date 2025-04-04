@@ -2,8 +2,8 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>AR Wine Experience</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AR Wine Experience Debug</title>
 
   <!-- Configurazioni per dispositivi mobile e permessi -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -89,20 +89,17 @@
   </style>
 </head>
 <body>
-  <!-- Schermata di caricamento iniziale -->
   <div class="loading-screen" id="loadingScreen">
     <div class="loading-spinner"></div>
     <p>Caricamento dell'esperienza AR...</p>
   </div>
 
-  <!-- Istruzioni per l'utente -->
   <div class="ui-container">
     <div class="tap-instruction hidden" id="tapInstruction">
       Tocca su una superficie per posizionare la bottiglia di vino
     </div>
   </div>
 
-  <!-- Selettore del modello di vino -->
   <div class="wine-selector" id="wineSelector">
     <button data-model="wine-red.glb">Rosso</button>
     <button data-model="wine-white.glb">Bianco</button>
@@ -113,6 +110,12 @@
     import * as THREE from 'https://unpkg.com/three@0.128.0/build/three.module.js';
     import { GLTFLoader } from 'https://unpkg.com/three@0.128.0/examples/jsm/loaders/GLTFLoader.js';
     import { ARButton } from 'https://unpkg.com/three@0.128.0/examples/jsm/webxr/ARButton.js';
+
+    // Verifica di base per il supporto WebXR
+    if (!navigator.xr) {
+      alert("WebXR non è supportato da questo dispositivo o browser.");
+      console.error("WebXR non disponibile");
+    }
 
     let scene, camera, renderer, controller, reticle;
     let hitTestSource = null, hitTestSourceRequested = false;
@@ -128,7 +131,7 @@
     animate();
 
     function init() {
-      // Inizializzazione scena e camera
+      console.log("Inizializzazione scena e renderer...");
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
@@ -142,19 +145,17 @@
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
-      // Aggiunta del bottone AR con supporto per il dom-overlay
+      // Crea il pulsante AR
       document.body.appendChild(ARButton.createButton(renderer, {
         requiredFeatures: ['hit-test'],
         optionalFeatures: ['dom-overlay'],
         domOverlay: { root: document.body }
       }));
 
-      // Controller per gestire il tap sullo schermo
       controller = renderer.xr.getController(0);
       controller.addEventListener('select', onSelect);
       scene.add(controller);
 
-      // Creazione del reticle per il posizionamento
       reticle = new THREE.Mesh(
         new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
         new THREE.MeshBasicMaterial({ color: 0x00ffff })
@@ -163,12 +164,12 @@
       reticle.visible = false;
       scene.add(reticle);
 
-      // Gestione dei bottoni per la selezione del modello
       document.querySelectorAll('.wine-selector button').forEach(btn => {
         btn.addEventListener('click', () => {
           selectedModel = btn.dataset.model;
           modelLoaded = false;
           wineModel = null;
+          console.log("Modello selezionato:", selectedModel);
         });
       });
 
@@ -181,10 +182,10 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    // Carica il modello selezionato (se già non caricato)
     function loadModel(callback) {
       if (modelLoaded) return callback();
       const loader = new GLTFLoader();
+      console.log("Caricamento modello:", selectedModel);
       loader.load(selectedModel,
         gltf => {
           wineModel = gltf.scene;
@@ -192,17 +193,18 @@
           modelLoaded = true;
           loadingScreen.classList.add('hidden');
           setTimeout(() => loadingScreen.style.display = 'none', 300);
+          console.log("Modello caricato correttamente.");
           callback();
         },
         undefined,
         error => {
-          console.error('Errore nel caricamento del modello:', error);
+          console.error("Errore nel caricamento del modello:", error);
         }
       );
     }
 
-    // Gestione del tap sullo schermo per posizionare il modello
     function onSelect() {
+      console.log("Evento select rilevato. Reticle visibile:", reticle.visible);
       if (reticle.visible && !modelPlaced) {
         loadModel(() => {
           const model = wineModel.clone();
@@ -214,11 +216,13 @@
           reticle.visible = false;
           tapInstruction.classList.add('hidden');
           wineSelector.classList.add('hidden');
+          console.log("Modello posizionato in:", model.position);
         });
+      } else {
+        console.log("Select ignorato: reticle non visibile o modello già posizionato.");
       }
     }
 
-    // Animazione di scaling del modello
     function animateModel(model) {
       const targetScale = 0.5;
       const duration = 500;
@@ -241,11 +245,13 @@
         const referenceSpace = renderer.xr.getReferenceSpace();
         const session = renderer.xr.getSession();
 
-        // Richiedi il hit test se non già richiesto
         if (!hitTestSourceRequested) {
           session.requestReferenceSpace('viewer').then(refSpace => {
             session.requestHitTestSource({ space: refSpace }).then(source => {
               hitTestSource = source;
+              console.log("Hit test source ottenuto.");
+            }).catch(err => {
+              console.error("Errore nella richiesta del hit test:", err);
             });
           });
           session.addEventListener('end', () => {
